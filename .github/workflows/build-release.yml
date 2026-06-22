@@ -16,6 +16,9 @@ on:
         required: true
         default: 'SNI-Spoofing v1.0.0 (Windows Portable)'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Windows Executable
