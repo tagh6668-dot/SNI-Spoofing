@@ -48,6 +48,12 @@ if sys.platform == "win32":
             os.add_dll_directory(exe_dir)
         except Exception:
             pass
+    try:
+        import pydivert.windivert_dll
+        # Force pydivert to load our local 32-bit WinDivert.dll
+        pydivert.windivert_dll.DLL_PATH = os.path.join(exe_dir, "WinDivert.dll")
+    except Exception as e:
+        print(f"[Warning] Failed to override pydivert DLL path: {e}", file=sys.stderr)
 
 
 # from utils.proxy_protocols import parse_vless_protocol
