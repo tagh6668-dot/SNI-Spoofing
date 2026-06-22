@@ -1,0 +1,96 @@
+name: Build and Release Windows Executable
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release Tag Name'
+        required: true
+        default: 'v1.0.0-win'
+      release_title:
+        description: 'Release Title'
+        required: true
+        default: 'SNI-Spoofing v1.0.0 (Windows Portable)'
+
+jobs:
+  build:
+    name: Build Windows Executable
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        architecture: 'x86' # Force x86 compiler for absolute compatibility with Windows 10 x86 / x64
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Download Official Signed WinDivert
+      shell: powershell
+      run: |
+        $Version = "2.2.2"
+        $Package = "2.2.2-A"
+        $Url = "https://github.com/basil00/WinDivert/releases/download/v$Version/WinDivert-$Package.zip"
+        
+        Write-Host "Downloading WinDivert..."
+        Invoke-WebRequest -Uri $Url -OutFile "windivert.zip"
+        
+        Write-Host "Extracting WinDivert..."
+        Expand-Archive -Path "windivert.zip" -DestinationPath "windivert_temp"
+        
+        # Create output directory
+        New-Item -ItemType Directory -Force -Path "dist_release"
+        
+        # Copy config.json
+        Copy-Item "config.json" -Destination "dist_release/config.json"
+        
+        # Extract drivers to the release directory to support WOW64 seamlessly
+        Copy-Item "windivert_temp/WinDivert-$Package/x86/WinDivert.dll" -Destination "dist_release/WinDivert.dll"
+        Copy-Item "windivert_temp/WinDivert-$Package/x86/WinDivert32.sys" -Destination "dist_release/WinDivert32.sys"
+        Copy-Item "windivert_temp/WinDivert-$Package/x64/WinDivert64.sys" -Destination "dist_release/WinDivert64.sys"
+        
+        # Clean up temp
+        Remove-Item -Recurse -Force "windivert_temp"
+        Remove-Item -Force "windivert.zip"
+
+    - name: Compile Executable with PyInstaller
+      run: |
+        pyinstaller --onefile --console --name SNI-Spoofing main.py
+
+    - name: Prepare Final Package
+      shell: powershell
+      run: |
+        # Copy compiled exe into the release folder
+        Copy-Item "dist/SNI-Spoofing.exe" -Destination "dist_release/SNI-Spoofing.exe"
+        
+        # Create ZIP archive
+        Compress-Archive -Path "dist_release/*" -DestinationPath "SNI-Spoofing-Windows.zip"
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: SNI-Spoofing-Windows
+        path: SNI-Spoofing-Windows.zip
+
+    - name: Create and Publish Release
+      if: github.event_name == 'workflow_dispatch'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.inputs.release_tag }}
+        name: ${{ github.event.inputs.release_title }}
+        draft: false
+        prerelease: false
+        files: SNI-Spoofing-Windows.zip
+        token: ${{ secrets.GITHUB_TOKEN }}

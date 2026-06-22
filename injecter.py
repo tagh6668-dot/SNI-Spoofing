@@ -1,10 +1,21 @@
 import sys
+import os
 from abc import ABC, abstractmethod
 
 from pydivert import WinDivert, Packet
 
 
 # from pydivert.consts import *
+
+
+def get_exe_dir():
+    """Returns the directory where the .exe (or script) is located."""
+    if getattr(sys, 'frozen', False):
+        # Running as a PyInstaller EXE
+        return os.path.dirname(sys.executable)
+    else:
+        # Running as a normal Python script
+        return os.path.dirname(os.path.abspath(__file__))
 
 
 class TcpInjector(ABC):
@@ -24,7 +35,14 @@ class TcpInjector(ABC):
         # self.filter = "tcp"
         # if ip_filter:
         #     self.filter += " and " + ip_filter
-        self.w: WinDivert = WinDivert(w_filter)
+        
+        # Load WinDivert.dll directly from the executable's directory for robust portable deployment
+        dll_dir = get_exe_dir()
+        dll_file = os.path.join(dll_dir, "WinDivert.dll")
+        if os.path.exists(dll_file):
+            self.w: WinDivert = WinDivert(w_filter, dll_path=dll_file)
+        else:
+            self.w: WinDivert = WinDivert(w_filter)
 
     @abstractmethod
     def inject(self, packet: Packet):
