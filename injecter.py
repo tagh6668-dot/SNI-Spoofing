@@ -35,14 +35,7 @@ class TcpInjector(ABC):
         # self.filter = "tcp"
         # if ip_filter:
         #     self.filter += " and " + ip_filter
-        
-        # Load WinDivert.dll directly from the executable's directory for robust portable deployment
-        dll_dir = get_exe_dir()
-        dll_file = os.path.join(dll_dir, "WinDivert.dll")
-        if os.path.exists(dll_file):
-            self.w: WinDivert = WinDivert(w_filter, dll_path=dll_file)
-        else:
-            self.w: WinDivert = WinDivert(w_filter)
+        self.w: WinDivert = WinDivert(w_filter)
 
     @abstractmethod
     def inject(self, packet: Packet):

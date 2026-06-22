@@ -6,11 +6,6 @@ import traceback
 import threading
 import json
 
-# from utils.proxy_protocols import parse_vless_protocol
-from utils.network_tools import get_default_interface_ipv4
-from utils.packet_templates import ClientHelloMaker
-from fake_tcp import FakeInjectiveConnection, FakeTcpInjector
-
 
 def get_exe_dir():
     """Returns the directory where the .exe (or script) is located."""
@@ -20,6 +15,23 @@ def get_exe_dir():
     else:
         # Running as a normal Python script
         return os.path.dirname(os.path.abspath(__file__))
+
+
+# Ensure Windows DLL search path includes the executable's directory to load WinDivert.dll flawlessly
+if sys.platform == "win32":
+    exe_dir = get_exe_dir()
+    os.environ["PATH"] = exe_dir + os.path.pathsep + os.environ.get("PATH", "")
+    if hasattr(os, "add_dll_directory"):
+        try:
+            os.add_dll_directory(exe_dir)
+        except Exception:
+            pass
+
+
+# from utils.proxy_protocols import parse_vless_protocol
+from utils.network_tools import get_default_interface_ipv4
+from utils.packet_templates import ClientHelloMaker
+from fake_tcp import FakeInjectiveConnection, FakeTcpInjector
 
 
 # Build the path to config.json
