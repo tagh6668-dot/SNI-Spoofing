@@ -17,6 +17,28 @@ def get_exe_dir():
         return os.path.dirname(os.path.abspath(__file__))
 
 
+def safe_setsockopt_keepalive(sock: socket.socket):
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    except Exception:
+        pass
+    
+    # TCP Keepalive parameters are OS-specific. Safely set them if they are available.
+    for opt, val in [("TCP_KEEPIDLE", 11), ("TCP_KEEPINTVL", 2), ("TCP_KEEPCNT", 3)]:
+        if hasattr(socket, opt):
+            try:
+                sock.setsockopt(socket.IPPROTO_TCP, getattr(socket, opt), val)
+            except Exception:
+                pass
+        elif opt == "TCP_KEEPIDLE" and hasattr(socket, "SIO_KEEPALIVE_VALS") and sys.platform == "win32":
+            # On Windows, keepalive can be set natively via IOCTL if SIO_KEEPALIVE_VALS is available
+            try:
+                # SIO_KEEPALIVE_VALS: (on/off, idle_ms, interval_ms)
+                sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 11000, 2000))
+            except Exception:
+                pass
+
+
 # Ensure Windows DLL search path includes the executable's directory to load WinDivert.dll flawlessly
 if sys.platform == "win32":
     exe_dir = get_exe_dir()
@@ -142,10 +164,7 @@ async def handle(incoming_sock: socket.socket, incoming_remote_addr):
         outgoing_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         outgoing_sock.setblocking(False)
         outgoing_sock.bind((INTERFACE_IPV4, 0))
-        outgoing_sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        outgoing_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 11)
-        outgoing_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 2)
-        outgoing_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+        safe_setsockopt_keepalive(outgoing_sock)
         src_port = outgoing_sock.getsockname()[1]
         fake_injective_conn = FakeInjectiveConnection(outgoing_sock, INTERFACE_IPV4, CONNECT_IP, src_port, CONNECT_PORT,
                                                       fake_data,
@@ -211,19 +230,13 @@ async def main():
     mother_sock.setblocking(False)
     mother_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     mother_sock.bind((LISTEN_HOST, LISTEN_PORT))
-    mother_sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-    mother_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 11)
-    mother_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 2)
-    mother_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+    safe_setsockopt_keepalive(mother_sock)
     mother_sock.listen()
     loop = asyncio.get_running_loop()
     while True:
         incoming_sock, addr = await loop.sock_accept(mother_sock)
         incoming_sock.setblocking(False)
-        incoming_sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        incoming_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 11)
-        incoming_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 2)
-        incoming_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+        safe_setsockopt_keepalive(incoming_sock)
         asyncio.create_task(handle(incoming_sock, addr))
 
 
